@@ -1,0 +1,83 @@
+import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
+import org.bouncycastle.crypto.InvalidCipherTextException;
+import org.bouncycastle.crypto.generators.RSAKeyPairGenerator;
+import org.bouncycastle.crypto.params.AsymmetricKeyParameter;
+import org.bouncycastle.crypto.params.RSAKeyGenerationParameters;
+import org.bouncycastle.crypto.util.PrivateKeyFactory;
+import org.bouncycastle.crypto.util.PublicKeyFactory;
+import org.bouncycastle.crypto.util.SubjectPublicKeyInfoFactory;
+import org.bouncycastle.openssl.PEMEncryptor;
+import org.bouncycastle.openssl.PEMEncryptorBuilder;
+import org.bouncycastle.openssl.PEMParser;
+import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
+import org.bouncycastle.operator.OutputEncryptor;
+import org.bouncycastle.operator.jcajce.JcaPEMWriter;
+import org.bouncycastle.util.io.pem.PemObject;
+import org.bouncycastle.util.io.pem.PemWriter;
+import javax.crypto.Cipher;
+import java.io.*;
+import java.security.KeyPair;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.Security;
+
+public class RSAEncryptionDecryption {
+
+    public static void main(String[] args) throws IOException, InvalidCipherTextException {
+        Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
+
+        // Generate RSA key pair
+        AsymmetricCipherKeyPair keyPair = generateKeyPair();
+
+        // Get public and private keys
+        AsymmetricKeyParameter publicKey = keyPair.getPublic();
+        AsymmetricKeyParameter privateKey = keyPair.getPrivate();
+
+        // Encrypt
+        byte[] ciphertext = encrypt("This is a secret message.", publicKey);
+
+        // Decrypt
+        String plaintext = decrypt(ciphertext, privateKey);
+
+        System.out.println("Encrypted: " + new String(ciphertext));
+        System.out.println("Decrypted: " + plaintext);
+    }
+
+    public static AsymmetricCipherKeyPair generateKeyPair() {
+        RSAKeyPairGenerator generator = new RSAKeyPairGenerator();
+        generator.init(new RSAKeyGenerationParameters(null, 2048, 80, null));
+        return generator.generateKeyPair();
+    }
+
+    public static byte[] encrypt(String plaintext, AsymmetricKeyParameter publicKey)
+            throws IOException, InvalidCipherTextException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        JcaPEMWriter pemWriter = new JcaPEMWriter(new OutputStreamWriter(out));
+        pemWriter.writeObject(publicKey);
+        pemWriter.close();
+        ByteArrayInputStream in = new ByteArrayInputStream(out.toByteArray());
+        PEMParser pemParser = new PEMParser(new InputStreamReader(in));
+        Object object = pemParser.readObject();
+        pemParser.close();
+        RSAKeyParameters rsaKeyParameters = (RSAKeyParameters) PublicKeyFactory.createKey(SubjectPublicKeyInfoFactory.createSubjectPublicKeyInfo((RSAKeyParameters) object));
+        Cipher cipher = Cipher.getInstance("RSA/NONE/OAEPWithSHA256AndMGF1Padding", "BC");
+        cipher.init(Cipher.ENCRYPT_MODE, rsaKeyParameters);
+        return cipher.doFinal(plaintext.getBytes());
+    }
+
+    public static String decrypt(byte[] ciphertext, AsymmetricKeyParameter privateKey)
+            throws IOException, InvalidCipherTextException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        JcaPEMWriter pemWriter = new JcaPEMWriter(new OutputStreamWriter(out));
+        pemWriter.writeObject(privateKey);
+        pemWriter.close();
+        ByteArrayInputStream in = new ByteArrayInputStream(out.toByteArray());
+        PEMParser pemParser = new PEMParser(new InputStreamReader(in));
+        Object object = pemParser.readObject();
+        pemParser.close();
+        RSAKeyParameters rsaKeyParameters = (RSAKeyParameters) PrivateKeyFactory.createKey(PrivateKeyInfoFactory.createPrivateKeyInfo((RSAPrivateKeyParameters) object));
+        Cipher cipher = Cipher.getInstance("RSA/NONE/OAEPWithSHA256AndMGF1Padding", "BC");
+        cipher.init(Cipher.DECRYPT_MODE, rsaKeyParameters);
+        return new String(cipher.doFinal(ciphertext));
+    }
+}
